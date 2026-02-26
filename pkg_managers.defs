@@ -1,0 +1,13 @@
+#ifdef DNF
+#define INSTALL_CMD sudo dnf install
+#define DEL_CMD sudo dnf remove
+#define UPGRADE_CMD sudo dnf upgrade
+#define PKG_INFO_CMD sudo dnf info
+#elif defined(APT)
+#define INSTALL_CMD sudo apt install
+#define DEL_CMD sudo apt remove
+#define UPGRADE_CMD sudo apt update && sudo apt upgrade
+#define PKG_INFO_CMD sudo apt info
+#else
+#error No valid pkg manager in argument
+#endif

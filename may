@@ -1,4 +1,5 @@
 #!/bin/bash
+#include "pkg_managers.defs"
 
 #############################################################
 # may - Dnf wrapper storing the reason for the installation #
@@ -16,7 +17,7 @@ may_info() {
 }
 
 probably_install() {
-   if sudo dnf install "$1"; then
+   if INSTALL_CMD "$1"; then
      echo -e "${1}\t${@:2}" >> "$CONFIGS/scripts/var/programs.tsv"
    fi
 }
@@ -52,7 +53,7 @@ cleanup_tsv() {
 }
 
 probably_uninstall() {
-  if ! sudo dnf remove $1; then
+  if ! DEL_CMD $1; then
     confirmation "The uninstallation by dnf failed. Remove from the may package db anyway?" cleanup_tsv "$1"
   else 
     cleanup_tsv "$1"
@@ -109,13 +110,13 @@ case "$1" in
 
         if [[ "$original_reason" ]]; then
           echo "However, this package is listed in programs.tsv with this reason: $original_reason"
-          confirmation "Do you wish to remove it from the database Your Majesty?" cleanup_tsv "$2"
+          confirmation "Do you wish to remove it from the database?" cleanup_tsv "$2"
         fi
 
         exit 0
       fi
 
-      if sudo dnf info "$2"; then
+      if PKG_INFO_CMD "$2"; then
         confirmation "\nThis package is marked as being originally installed for this reason:\n${original_reason}\nProceed anyway?" probably_uninstall "$2"
       else
         exit 1
@@ -127,7 +128,7 @@ case "$1" in
     ;;
   info | infos)
     if [ "$2" ]; then
-      if sudo dnf info "$2"; then
+      if PKG_INFO_CMD "$2"; then
         # echo -e "\n"
         echo
       fi
@@ -144,7 +145,7 @@ case "$1" in
     fi
     ;;
   update | u)
-    sudo dnf upgrade ${@:2}
+      UPGRADE_CMD ${@:2}
     ;;
   ls | list | l)
     bat $CONFIGS/scripts/var/programs.tsv --style grid

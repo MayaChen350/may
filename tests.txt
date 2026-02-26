@@ -1,0 +1,3 @@
+#include "pkg_managers.defs"
+install command: INSTALL_CMD
+remove package command: DEL_CMD

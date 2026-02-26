@@ -1,0 +1,161 @@
+#!/bin/bash
+
+#############################################################
+# may - Dnf wrapper storing the reason for the installation #
+#############################################################
+
+get_maypackage_reason() { echo $(grep -P "^${1}\t" "$CONFIGS/scripts/var/programs.tsv" | cut -f 2); }
+
+may_info() {
+  local reason="$(get_maypackage_reason $1)"
+  if [ "$reason" ]; then
+    echo -e "May wrapper package info\nInstal. reason : $reason"
+  else
+    echo "Can't find the package in programs.tsv"
+  fi
+}
+
+probably_install() {
+   if sudo dnf install "$1"; then
+     echo -e "${1}\t${@:2}" >> "$CONFIGS/scripts/var/programs.tsv"
+   fi
+}
+
+say_yes_or_abortion() {
+  read answer
+  if [[ ${answer,,} =~ ^y.* || -z "$answer" ]]; then
+    "$1" "${@:2}"
+  else
+    echo "Aborting."
+    exit 0
+  fi
+}
+
+confirmation() {
+  local msg="$1"
+  local func="$2"
+
+  if [[ "$YoN" =~ ^-?-y.* ]]; then
+    "$func" "${@:3}"
+  else
+    echo -e "$msg"
+    say_yes_or_abortion "$func" "${@:3}"
+  fi
+}  
+
+cleanup_tsv() { 
+  if [[ "$1" =~ .*\..* ]]; then # getting better with regex
+    grep -Pv "^${1}\t" "$CONFIGS/scripts/var/programs.tsv" > tmp && mv tmp "$CONFIGS/scripts/var/programs.tsv"
+  else
+    sed -i "/^${1}\t/d" "$CONFIGS/scripts/var/programs.tsv"
+  fi
+}
+
+probably_uninstall() {
+  if ! sudo dnf remove $1; then
+    confirmation "The uninstallation by dnf failed. Remove from the may package db anyway?" cleanup_tsv "$1"
+  else 
+    cleanup_tsv "$1"
+  fi
+}
+
+case "$1" in
+  install | i | add | a)
+    # -y param
+    YoN="$4"
+
+    # Has package name
+    if [ "$2" ]; then
+
+      # Package name exists
+      if sudo dnf info "$2"; then
+
+        # Has provided reason
+        case "$1" in
+          install | i)
+            if [ "$3" ]; then
+              confirmation "Proceed with installation?" probably_install "$2" "${@:3}"
+            else
+              echo "You didn't provide any reason. Mark package as temporary?"
+              say_yes_or_abortion probably_install "$2" "tmp"
+            fi
+            ;;
+          *) # add, a
+            if [ "$3" ]; then   
+              echo -e "$2\t${@:3}" >> $CONFIGS/scripts/var/programs.tsv
+              echo Added "$2" in programs.tsv
+            else 
+              echo "Please provide a reason."
+              exit 1
+            fi
+            ;;
+        esac
+      else exit 1; fi
+    else
+      echo "Please provide a package to install!!"
+      exit 1
+    fi
+    ;;
+  remove | r | uninstall)
+    # -y param
+    YoN="$3"
+
+    # Has package name
+    if [ "$2" ]; then
+      original_reason="$(get_maypackage_reason $2)"
+      # Package name exists
+      if [[ ! $(sudo dnf list --installed | grep -w "$2") ]]; then
+        echo "Package \"$2\" does not seem to be installed on the system."
+
+        if [[ "$original_reason" ]]; then
+          echo "However, this package is listed in programs.tsv with this reason: $original_reason"
+          confirmation "Do you wish to remove it from the database Your Majesty?" cleanup_tsv "$2"
+        fi
+
+        exit 0
+      fi
+
+      if sudo dnf info "$2"; then
+        confirmation "\nThis package is marked as being originally installed for this reason:\n${original_reason}\nProceed anyway?" probably_uninstall "$2"
+      else
+        exit 1
+      fi
+    else    
+      echo "Please provide a package to uninstall!!"
+      exit 1
+    fi
+    ;;
+  info | infos)
+    if [ "$2" ]; then
+      if sudo dnf info "$2"; then
+        # echo -e "\n"
+        echo
+      fi
+      may_info $2 
+    else
+      echo No package name provided
+    fi
+    ;;
+  reason)
+    if [ "$2" ]; then
+      may_info $2
+    else
+      echo No package name provided
+    fi
+    ;;
+  update | u)
+    sudo dnf upgrade ${@:2}
+    ;;
+  ls | list | l)
+    bat $CONFIGS/scripts/var/programs.tsv --style grid
+    ;;
+  help | *)
+    echo "Usage:"
+    echo -e "\t $0 {install | i} <RPM Package name> <Reason> (-y)"
+    echo -e "\t $0 {remove | r | uninstall} <RPM Package Name> (-y)"
+    echo -e "\t $0 {info | infos} <RPM Package Name>"
+    echo -e "\t $0 {reason} <RPM Package Name>"
+    echo -e "\t $0 {add | a} <RPM Package name> <Reason> (-y)"
+    echo -e "\t $0 {update | u} (-y)"
+    ;;
+esac
